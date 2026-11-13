@@ -1,4 +1,9 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+// Empty string = same origin (single Heroku app serving API + web)
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL !== undefined
+    ? process.env.NEXT_PUBLIC_API_URL
+    : "http://localhost:4000";
+
 
 export type ApiResult<T> = { success: boolean; data: T; message?: string };
 

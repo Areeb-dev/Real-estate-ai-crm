@@ -19,10 +19,16 @@ export function useSocket(handlers: {
   useEffect(() => {
     if (!token) return;
 
-    const socket = io(API_URL, {
-      auth: { token },
-      transports: ["websocket", "polling"],
-    });
+    const socket = API_URL
+      ? io(API_URL, {
+          auth: { token },
+          transports: ["websocket", "polling"],
+        })
+      : io({
+          auth: { token },
+          transports: ["websocket", "polling"],
+        });
+
     socketRef.current = socket;
 
     socket.on("call:update", (payload) => handlersRef.current.onCallUpdate?.(payload));

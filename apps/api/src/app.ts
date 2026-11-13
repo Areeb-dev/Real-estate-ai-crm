@@ -1,4 +1,4 @@
-import express from "express";
+import express, { RequestHandler } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -12,13 +12,28 @@ import settingsRoutes from "./routes/settings.routes";
 import webhooksRoutes from "./routes/webhooks.routes";
 import outboundRoutes from "./routes/outbound.routes";
 
-export function createApp() {
+type CreateAppOptions = {
+  /** When set, unmatched routes are handed to Next.js instead of JSON 404 */
+  webHandler?: RequestHandler;
+};
+
+export function createApp(options: CreateAppOptions = {}) {
   const app = express();
+  const serveWeb = Boolean(options.webHandler);
 
   // Required behind localtunnel / ngrok / reverse proxies (X-Forwarded-For)
   app.set("trust proxy", 1);
 
-  app.use(helmet());
+  app.use(
+    helmet(
+      serveWeb
+        ? {
+            contentSecurityPolicy: false,
+            crossOriginEmbedderPolicy: false,
+          }
+        : undefined
+    )
+  );
   app.use(
     cors({
       origin: env.corsOrigin,
@@ -52,7 +67,12 @@ export function createApp() {
   app.use("/api/settings", settingsRoutes);
   app.use("/api/outbound", outboundRoutes);
 
-  app.use(notFound);
+  if (options.webHandler) {
+    app.all("*", options.webHandler);
+  } else {
+    app.use(notFound);
+  }
+
   app.use(errorHandler);
 
   return app;

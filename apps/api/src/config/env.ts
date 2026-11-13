@@ -14,7 +14,7 @@ function required(key: string, fallback?: string): string {
 
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
-  port: Number(process.env.API_PORT ?? 4000),
+  port: Number(process.env.PORT ?? process.env.API_PORT ?? 4000),
   apiUrl: process.env.API_URL ?? "http://localhost:4000",
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
   databaseUrl: required("DATABASE_URL", "mysql://crm_user:crm_password@localhost:3306/real_estate_crm"),
