@@ -10,6 +10,7 @@
     "dev:api": "npm run dev -w @real-estate/api",
     "dev:web": "npm run dev -w @real-estate/web",
     "build": "npm run build -w @real-estate/api && npm run build -w @real-estate/web",
+    "heroku-postbuild": "npm run db:generate -w @real-estate/api && npm run build -w @real-estate/api",
     "db:generate": "npm run db:generate -w @real-estate/api",
     "db:migrate": "npm run db:migrate -w @real-estate/api",
     "db:seed": "npm run db:seed -w @real-estate/api",
