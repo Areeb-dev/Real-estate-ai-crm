@@ -12,7 +12,7 @@ import settingsRoutes from "./routes/settings.routes";
 import webhooksRoutes from "./routes/webhooks.routes";
 import outboundRoutes from "./routes/outbound.routes";
 
-type CreateAppOptions = {
+export type CreateAppOptions = {
   /** When set, unmatched routes are handed to Next.js instead of JSON 404 */
   webHandler?: RequestHandler;
 };

@@ -1,8 +1,14 @@
 import http from "http";
 import path from "path";
-import { createApp } from "./app";
+import type { Request, Response } from "express";
+import { createApp, type CreateAppOptions } from "./app";
 import { env } from "./config/env";
 import { initSocket } from "./sockets";
+
+type NextServerFactory = (options: { dev?: boolean; dir?: string }) => {
+  prepare: () => Promise<void>;
+  getRequestHandler: () => (req: Request, res: Response) => void;
+};
 
 async function bootstrap() {
   const serveWeb =
@@ -10,19 +16,20 @@ async function bootstrap() {
     process.env.SERVE_WEB === "true" ||
     process.env.SERVE_WEB === "TRUE";
 
-  let webHandler: Parameters<typeof createApp>[0]["webHandler"];
+  let webHandler: CreateAppOptions["webHandler"];
 
   if (serveWeb) {
     // next is provided by the web workspace (hoisted in the monorepo)
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const next = require("next") as typeof import("next");
-    const nextApp = next({
+    const nextModule = require("next") as { default?: NextServerFactory } & NextServerFactory;
+    const createNextApp = nextModule.default ?? nextModule;
+    const nextApp = createNextApp({
       dev: false,
       dir: path.join(__dirname, "../../web"),
     });
     await nextApp.prepare();
     const handle = nextApp.getRequestHandler();
-    webHandler = (req, res) => handle(req, res);
+    webHandler = (req: Request, res: Response) => handle(req, res);
     console.log("Serving Next.js web app from the API process");
   }
 
