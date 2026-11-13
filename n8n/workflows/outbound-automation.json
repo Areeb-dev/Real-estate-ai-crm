@@ -1,0 +1,155 @@
+{
+  "name": "Horizon Outbound Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 5 }]
+        }
+      },
+      "id": "schedule",
+      "name": "Every 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "horizon-outbound-start",
+        "options": {}
+      },
+      "id": "webhook-start",
+      "name": "Manual / CRM Start Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 520],
+      "webhookId": "horizon-outbound-start"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($vars.BASE_URL || 'http://localhost:4000') + '/api/outbound/n8n/queue' }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "limit", "value": "20" }]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-n8n-secret", "value": "change-me-n8n-secret" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-queue",
+      "name": "1. Fetch queue from CRM DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [280, 400]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "split",
+      "name": "2. Split leads",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [520, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $vars.VAPI_API_KEY || $env.VAPI_API_KEY }}"
+            },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"assistantId\": \"{{ $json.assistantId || $vars.VAPI_ASSISTANT_ID || $env.VAPI_ASSISTANT_ID }}\",\n  \"phoneNumberId\": \"{{ $json.phoneNumberId || $vars.VAPI_PHONE_NUMBER_ID || $env.VAPI_PHONE_NUMBER_ID }}\",\n  \"customer\": {\n    \"number\": \"{{ $json.lead.phone }}\",\n    \"name\": \"{{ $json.lead.name }}\"\n  },\n  \"name\": \"Outbound {{ $json.lead.name }}\"\n}",
+        "options": {}
+      },
+      "id": "vapi-call",
+      "name": "4. Place Vapi outbound call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [780, 400],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($vars.BASE_URL || 'http://localhost:4000') + '/api/outbound/n8n/calls/started' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-n8n-secret", "value": "change-me-n8n-secret" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"leadId\": \"{{ $('2. Split leads').item.json.lead.id }}\",\n  \"campaignId\": \"{{ $('2. Split leads').item.json.campaignId }}\",\n  \"campaignLeadId\": \"{{ $('2. Split leads').item.json.campaignLeadId }}\",\n  \"vapiCallId\": \"{{ $json.id }}\",\n  \"customerPhone\": \"{{ $('2. Split leads').item.json.lead.phone }}\",\n  \"customerName\": \"{{ $('2. Split leads').item.json.lead.name }}\",\n  \"rawPayload\": {{ JSON.stringify($json) }}\n}",
+        "options": {}
+      },
+      "id": "save-started",
+      "name": "5. Insert call into DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1040, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($vars.BASE_URL || 'http://localhost:4000') + '/api/outbound/n8n/calls/failed' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-n8n-secret", "value": "change-me-n8n-secret" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"campaignLeadId\": \"{{ $('2. Split leads').item.json.campaignLeadId }}\",\n  \"campaignId\": \"{{ $('2. Split leads').item.json.campaignId }}\",\n  \"leadId\": \"{{ $('2. Split leads').item.json.lead.id }}\",\n  \"error\": \"{{ $json.error?.message || $json.message || 'Vapi call failed' }}\"\n}",
+        "options": {}
+      },
+      "id": "save-failed",
+      "name": "5b. Mark failed in DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1040, 520]
+    }
+  ],
+  "connections": {
+    "Every 5 minutes": {
+      "main": [[{ "node": "1. Fetch queue from CRM DB", "type": "main", "index": 0 }]]
+    },
+    "Manual / CRM Start Webhook": {
+      "main": [[{ "node": "1. Fetch queue from CRM DB", "type": "main", "index": 0 }]]
+    },
+    "1. Fetch queue from CRM DB": {
+      "main": [[{ "node": "2. Split leads", "type": "main", "index": 0 }]]
+    },
+    "2. Split leads": {
+      "main": [[{ "node": "4. Place Vapi outbound call", "type": "main", "index": 0 }]]
+    },
+    "4. Place Vapi outbound call": {
+      "main": [
+        [{ "node": "5. Insert call into DB", "type": "main", "index": 0 }],
+        [{ "node": "5b. Mark failed in DB", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}

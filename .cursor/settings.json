@@ -1,0 +1,7 @@
+{
+  "plugins": {
+    "n8n": {
+      "enabled": true
+    }
+  }
+}

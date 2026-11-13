@@ -1,0 +1,4 @@
+name,phone,email,propertyType,preferredLocation,budgetMin,budgetMax,purchasePreference,source,status,notes
+Hassan Ali,+923001119901,hassan@example.com,APARTMENT,Johar Town,8000000,12000000,BUY,import,NEW,Looking for 2 bed
+Nadia Sheikh,+923001119902,nadia@example.com,HOUSE,Model Town,25000000,40000000,BUY,import,PENDING,Family home
+Omar Siddiqui,+923001119903,,COMMERCIAL,MM Alam Road,5000000,9000000,RENT,import,NEW,Shop space

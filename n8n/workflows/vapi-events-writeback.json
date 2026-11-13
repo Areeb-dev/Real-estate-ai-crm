@@ -1,0 +1,93 @@
+{
+  "name": "Vapi Call Events → CRM DB",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vapi-events",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "vapi-webhook",
+      "name": "Vapi Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "vapi-events"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst message = body.message || body;\nconst call = message.call || body.call || {};\nconst type = message.type || body.type || 'unknown';\nconst status = (call.status || message.status || '').toLowerCase();\nconst isEnd = /end|completed|report|analysis/i.test(String(type)) || status === 'ended' || status === 'completed';\n\nconst transcript =\n  message.transcript ||\n  call.transcript ||\n  message.artifact?.transcript ||\n  (Array.isArray(message.messages)\n    ? message.messages.map(m => `${m.role || 'x'}: ${m.message || m.content || ''}`).join('\\n')\n    : '');\n\nconst summary =\n  message.analysis?.summary ||\n  message.summary ||\n  (transcript ? transcript.slice(0, 400) : 'Call finished');\n\nlet interestScore = 40;\nif (/interested|budget|looking|buy|rent/i.test(transcript)) interestScore += 25;\nif (/not interested|busy|no thanks/i.test(transcript)) interestScore -= 20;\ninterestScore = Math.max(0, Math.min(100, interestScore));\n\nconst interestLevel = interestScore >= 75 ? 'HIGH' : interestScore >= 50 ? 'MEDIUM' : interestScore >= 25 ? 'LOW' : 'NONE';\nconst leadStatus = interestScore >= 75 ? 'INTERESTED' : interestScore >= 50 ? 'FOLLOW_UP' : interestScore >= 25 ? 'PENDING' : 'NOT_INTERESTED';\n\nreturn [{\n  json: {\n    shouldWrite: isEnd || Boolean(call.id),\n    vapiCallId: call.id || message.callId,\n    status: isEnd ? 'COMPLETED' : (status || 'IN_PROGRESS'),\n    durationSeconds: call.duration || message.duration || undefined,\n    recordingUrl: call.recordingUrl || message.artifact?.recordingUrl,\n    transcript,\n    summary,\n    interestScore,\n    interestLevel,\n    leadStatus,\n    recommendedAction: interestScore >= 50 ? 'Human follow-up with matching listings' : 'Nurture later',\n    rawPayload: body,\n  }\n}];"
+      },
+      "id": "parse",
+      "name": "Parse Vapi payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [{ "value1": "={{ $json.shouldWrite }}", "value2": true }]
+        }
+      },
+      "id": "if-write",
+      "name": "Has call data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:4000/api/outbound/n8n/calls/result",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-n8n-secret", "value": "change-me-n8n-secret" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vapiCallId\": \"{{ $json.vapiCallId }}\",\n  \"status\": \"{{ $json.status }}\",\n  \"durationSeconds\": {{ $json.durationSeconds || null }},\n  \"recordingUrl\": {{ $json.recordingUrl ? JSON.stringify($json.recordingUrl) : null }},\n  \"transcript\": {{ JSON.stringify($json.transcript || '') }},\n  \"summary\": {{ JSON.stringify($json.summary || '') }},\n  \"interestScore\": {{ $json.interestScore }},\n  \"interestLevel\": \"{{ $json.interestLevel }}\",\n  \"leadStatus\": \"{{ $json.leadStatus }}\",\n  \"recommendedAction\": {{ JSON.stringify($json.recommendedAction || '') }}\n}",
+        "options": {}
+      },
+      "id": "write-db",
+      "name": "Write result to CRM DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true } }}"
+      },
+      "id": "respond",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [940, 300]
+    }
+  ],
+  "connections": {
+    "Vapi Webhook": {
+      "main": [[{ "node": "Parse Vapi payload", "type": "main", "index": 0 }]]
+    },
+    "Parse Vapi payload": {
+      "main": [[{ "node": "Has call data?", "type": "main", "index": 0 }]]
+    },
+    "Has call data?": {
+      "main": [
+        [{ "node": "Write result to CRM DB", "type": "main", "index": 0 }],
+        [{ "node": "Respond 200", "type": "main", "index": 0 }]
+      ]
+    },
+    "Write result to CRM DB": {
+      "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}

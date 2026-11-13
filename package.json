@@ -1,0 +1,26 @@
+{
+  "name": "real-estate-ai-crm",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @real-estate/api\" \"npm run dev -w @real-estate/web\"",
+    "dev:api": "npm run dev -w @real-estate/api",
+    "dev:web": "npm run dev -w @real-estate/web",
+    "build": "npm run build -w @real-estate/api && npm run build -w @real-estate/web",
+    "db:generate": "npm run db:generate -w @real-estate/api",
+    "db:migrate": "npm run db:migrate -w @real-estate/api",
+    "db:seed": "npm run db:seed -w @real-estate/api",
+    "db:push": "npm run db:push -w @real-estate/api",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "n8n": "npx --yes n8n@1.82.0 start",
+    "n8n:docker": "docker compose up -d n8n",
+    "seed:outbound": "tsx scripts/seed-outbound-test.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

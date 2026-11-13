@@ -1,0 +1,326 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  AGENT
+  VIEWER
+}
+
+enum LeadStatus {
+  NEW
+  PENDING
+  INTERESTED
+  NOT_INTERESTED
+  FOLLOW_UP
+  QUALIFIED
+  DISQUALIFIED
+  NO_RESPONSE
+}
+
+enum PurchasePreference {
+  BUY
+  SELL
+  RENT
+  UNKNOWN
+}
+
+enum PropertyType {
+  APARTMENT
+  HOUSE
+  VILLA
+  PLOT
+  COMMERCIAL
+  OFFICE
+  OTHER
+}
+
+enum CallStatus {
+  RINGING
+  IN_PROGRESS
+  COMPLETED
+  MISSED
+  FAILED
+  VOICEMAIL
+}
+
+enum InterestLevel {
+  HIGH
+  MEDIUM
+  LOW
+  NONE
+  UNKNOWN
+}
+
+enum FollowUpStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  OVERDUE
+}
+
+enum NotificationType {
+  NEW_LEAD
+  NEW_CALL
+  FOLLOW_UP
+  MISSED_CALL
+  SYSTEM
+  OUTBOUND_CALL
+  CAMPAIGN
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum CampaignLeadStatus {
+  PENDING
+  QUEUED
+  CALLING
+  COMPLETED
+  MISSED
+  FAILED
+  SKIPPED
+}
+
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String
+  name         String
+  role         Role           @default(AGENT)
+  phone        String?
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  leads        Lead[]         @relation("AssignedLeads")
+  followUps    FollowUp[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Lead {
+  id                  String             @id @default(uuid())
+  name                String
+  phone               String             @unique
+  email               String?
+  propertyType        PropertyType?
+  preferredLocation   String?
+  budgetMin           Decimal?           @db.Decimal(14, 2)
+  budgetMax           Decimal?           @db.Decimal(14, 2)
+  purchasePreference  PurchasePreference @default(UNKNOWN)
+  source              String             @default("manual")
+  status              LeadStatus         @default(NEW)
+  notes               String?            @db.Text
+  assignedToId        String?
+  assignedTo          User?              @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  calls               Call[]
+  followUps           FollowUp[]
+  campaignLeads       CampaignLead[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([source])
+  @@map("leads")
+}
+
+model Call {
+  id                String         @id @default(uuid())
+  vapiCallId        String?        @unique
+  leadId            String?
+  lead              Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  campaignId        String?
+  campaign          Campaign?      @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  customerName      String?
+  customerPhone     String
+  direction         String         @default("inbound")
+  status            CallStatus     @default(RINGING)
+  startedAt         DateTime?
+  endedAt           DateTime?
+  durationSeconds   Int?
+  recordingUrl      String?        @db.Text
+  interestLevel     InterestLevel  @default(UNKNOWN)
+  interestScore     Int?
+  summary           String?        @db.Text
+  retryCount        Int            @default(0)
+  rawPayload        Json?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  transcript        CallTranscript?
+  analysis          CallAnalysis?
+  followUps         FollowUp[]
+  campaignLeads     CampaignLead[]
+
+  @@index([customerPhone])
+  @@index([status])
+  @@index([startedAt])
+  @@index([createdAt])
+  @@index([direction])
+  @@map("calls")
+}
+
+model Campaign {
+  id              String         @id @default(uuid())
+  name            String
+  description     String?        @db.Text
+  status          CampaignStatus @default(DRAFT)
+  assistantId     String?
+  phoneNumberId   String?
+  scheduledAt     DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  maxRetries      Int            @default(1)
+  retryDelayMins  Int            @default(60)
+  createdById     String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  leads           CampaignLead[]
+  calls           Call[]
+
+  @@index([status])
+  @@map("campaigns")
+}
+
+model CampaignLead {
+  id          String             @id @default(uuid())
+  campaignId  String
+  campaign    Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  leadId      String
+  lead        Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  status      CampaignLeadStatus @default(PENDING)
+  attempts    Int                @default(0)
+  lastCallId  String?
+  lastCall    Call?              @relation(fields: [lastCallId], references: [id], onDelete: SetNull)
+  lastError   String?            @db.Text
+  scheduledAt DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([campaignId, leadId])
+  @@index([status])
+  @@map("campaign_leads")
+}
+
+model CallTranscript {
+  id        String   @id @default(uuid())
+  callId    String   @unique
+  call      Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
+  content   String   @db.LongText
+  messages  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("call_transcripts")
+}
+
+model CallAnalysis {
+  id                   String        @id @default(uuid())
+  callId               String        @unique
+  call                 Call          @relation(fields: [callId], references: [id], onDelete: Cascade)
+  summary              String?       @db.Text
+  propertyType         PropertyType?
+  location             String?
+  budgetMin            Decimal?      @db.Decimal(14, 2)
+  budgetMax            Decimal?      @db.Decimal(14, 2)
+  purchaseTimeline     String?
+  customerIntent       PurchasePreference @default(UNKNOWN)
+  interestLevel        InterestLevel @default(UNKNOWN)
+  interestScore        Int           @default(0)
+  extractedRequirements Json?
+  recommendedAction    String?       @db.Text
+  rawAnalysis          Json?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@map("call_analyses")
+}
+
+model AIAgent {
+  id           String   @id @default(uuid())
+  name         String
+  voice        String   @default("jennifer")
+  language     String   @default("en")
+  greeting     String   @db.Text
+  systemPrompt String   @db.LongText
+  vapiAssistantId String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("ai_agents")
+}
+
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model FollowUp {
+  id          String         @id @default(uuid())
+  leadId      String
+  lead        Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  callId      String?
+  call        Call?          @relation(fields: [callId], references: [id], onDelete: SetNull)
+  assignedToId String?
+  assignedTo  User?          @relation(fields: [assignedToId], references: [id])
+  dueAt       DateTime
+  notes       String?        @db.Text
+  status      FollowUpStatus @default(PENDING)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([dueAt])
+  @@index([status])
+  @@map("follow_ups")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String?
+  user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  isRead    Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model WebhookEvent {
+  id          String   @id @default(uuid())
+  provider    String   @default("vapi")
+  eventId     String   @unique
+  eventType   String
+  payload     Json
+  processedAt DateTime?
+  status      String   @default("pending")
+  error       String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([status])
+  @@map("webhook_events")
+}
