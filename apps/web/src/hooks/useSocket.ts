@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
-import { API_URL } from "@/lib/api";
+import { getApiUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 export function useSocket(handlers: {
@@ -19,8 +19,9 @@ export function useSocket(handlers: {
   useEffect(() => {
     if (!token) return;
 
-    const socket = API_URL
-      ? io(API_URL, {
+    const url = getApiUrl();
+    const socket = url
+      ? io(url, {
           auth: { token },
           transports: ["websocket", "polling"],
         })
@@ -28,7 +29,6 @@ export function useSocket(handlers: {
           auth: { token },
           transports: ["websocket", "polling"],
         });
-
     socketRef.current = socket;
 
     socket.on("call:update", (payload) => handlersRef.current.onCallUpdate?.(payload));

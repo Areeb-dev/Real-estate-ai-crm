@@ -1,9 +1,33 @@
-// Empty string = same origin (single Heroku app serving API + web)
-const API_URL =
+/**
+ * Resolve API base URL at call time (browser).
+ * On Heroku (single dyno), use same-origin so a baked-in localhost from
+ * NEXT_PUBLIC_API_URL at build time cannot break production.
+ */
+export function getApiUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_API_URL;
+
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host !== "localhost" && host !== "127.0.0.1") {
+      if (fromEnv && !/localhost|127\.0\.0\.1/.test(fromEnv)) {
+        return fromEnv.replace(/\/$/, "");
+      }
+      return ""; // same origin — /api/... on this Heroku app
+    }
+    return (fromEnv || "http://localhost:4000").replace(/\/$/, "");
+  }
+
+  return (fromEnv || process.env.API_URL || "http://localhost:4000").replace(
+    /\/$/,
+    ""
+  );
+}
+
+/** @deprecated Prefer getApiUrl() — kept for existing imports */
+export const API_URL =
   process.env.NEXT_PUBLIC_API_URL !== undefined
     ? process.env.NEXT_PUBLIC_API_URL
     : "http://localhost:4000";
-
 
 export type ApiResult<T> = { success: boolean; data: T; message?: string };
 
@@ -25,7 +49,7 @@ export async function api<T>(
     if (token) headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${getApiUrl()}${path}`, {
     ...options,
     headers,
   });
@@ -36,5 +60,3 @@ export async function api<T>(
   }
   return json.data as T;
 }
-
-export { API_URL };
